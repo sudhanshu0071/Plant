@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay Control</title>
+<style>
+  :root { --bg:#f2f2f2; --card:#fff; --text:#1a1a1a; --off:#8a8a8a; --on:#2e9e4f; --accent:#1a73e8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#121212; --card:#1e1e1e; --text:#f0f0f0; --off:#555; --on:#37b25f; --accent:#4a90f0; }
+  }
+  body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text);
+         margin: 0; padding: 20px; text-align: center; }
+  .box { max-width: 360px; margin: 0 auto; }
+  h2 { margin: 10px 0 6px; }
+  input { display: block; width: 100%; box-sizing: border-box; margin: 10px 0; padding: 14px;
+          font-size: 16px; border-radius: 10px; border: 1px solid #999; background: var(--card); color: var(--text); }
+  button { display: block; width: 100%; padding: 18px; margin: 12px 0; font-size: 20px;
+           border: none; border-radius: 12px; color: #fff; background: var(--off); }
+  button.on { background: var(--on); }
+  button.login { background: var(--accent); }
+  button.small { font-size: 14px; padding: 10px; background: transparent; color: var(--accent); }
+  #status { margin: 8px 0 16px; font-size: 14px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: #c33; }
+  .dot.live { background: var(--on); }
+  #error { color: #c33; min-height: 20px; font-size: 14px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="box">
+
+  <div id="loginView">
+    <h2>Relay Control</h2>
+    <input id="email" type="email" placeholder="Email" autocomplete="username">
+    <input id="pass" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="login" id="loginBtn">Log in</button>
+    <div id="error"></div>
+  </div>
+
+  <div id="appView" class="hidden">
+    <h2>Relay Control</h2>
+    <div id="status"><span class="dot" id="dot"></span><span id="statusText">Checking ESP32…</span></div>
+    <div id="relays"></div>
+    <button class="small" id="logoutBtn">Log out</button>
+  </div>
+
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getDatabase, ref, onValue, set }
+    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  // ---------- FILL THESE IN (Firebase console > Project settings > Your apps) ----------
+  const firebaseConfig = {
+    apiKey: "AIzaSyCQ_MUMI7qBxX0hf4F_OsKFBlKAwWfKLpA",
+    authDomain: "plant-474a2.firebaseapp.com",
+    databaseURL: "https://plant-474a2-default-rtdb.firebaseio.com",
+    projectId: "plant-474a2",
+    appId: "1:464729582029:web:85149885a0f6545f33fc84"
+  };
+  // ------------------------------------------------------------------------------------
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getDatabase(app);
+
+  const $ = id => document.getElementById(id);
+  let relays = {};
+  let lastSeen = 0;
+  let listening = false;
+
+  function renderRelays() {
+    const box = $("relays");
+    box.innerHTML = "";
+    for (let n = 1; n <= 5; n++) {
+      const on = relays["r" + n] === true;
+      const b = document.createElement("button");
+      b.className = on ? "on" : "";
+      b.textContent = "Relay " + n + ": " + (on ? "ON" : "OFF");
+      b.onclick = () => set(ref(db, "relays/r" + n), !on);
+      box.appendChild(b);
+    }
+  }
+
+  function renderStatus() {
+    const online = lastSeen && (Date.now() - lastSeen) < 30000;
+    $("dot").className = "dot" + (online ? " live" : "");
+    $("statusText").textContent = online ? "ESP32 online" : "ESP32 offline (commands will apply when it reconnects)";
+  }
+
+  function startListening() {
+    if (listening) return;
+    listening = true;
+    onValue(ref(db, "relays"), snap => { relays = snap.val() || {}; renderRelays(); });
+    onValue(ref(db, "status/lastSeen"), snap => { lastSeen = snap.val() || 0; renderStatus(); });
+    setInterval(renderStatus, 5000);
+  }
+
+  $("loginBtn").onclick = async () => {
+    $("error").textContent = "";
+    try {
+      await signInWithEmailAndPassword(auth, $("email").value.trim(), $("pass").value);
+    } catch (e) {
+      $("error").textContent = "Login failed. Check email and password.";
+    }
+  };
+
+  $("logoutBtn").onclick = () => signOut(auth);
+
+  onAuthStateChanged(auth, user => {
+    $("loginView").classList.toggle("hidden", !!user);
+    $("appView").classList.toggle("hidden", !user);
+    if (user) { renderRelays(); startListening(); }
+  });
+</script>
+</body>
+</html>

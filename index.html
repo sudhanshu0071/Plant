@@ -22,7 +22,7 @@
   button { font:inherit; color:inherit; border:0; background:none; cursor:pointer; }
   .hidden { display:none !important; }
 
-  /* ---------- login ---------- */
+  /* login */
   #loginView { height:100%; display:flex; flex-direction:column; justify-content:center; padding:28px; max-width:420px; margin:0 auto; }
   #loginView h1 { font-size:38px; line-height:1.05; margin:0 0 6px; font-weight:800; }
   #loginView p { color:var(--mute); margin:0 0 26px; }
@@ -32,7 +32,7 @@
   .primary { width:100%; margin-top:14px; padding:16px; border-radius:14px; background:var(--leaf); color:#06261a; font-weight:800; font-size:17px; }
   #error { color:var(--bad); min-height:22px; margin-top:10px; font-size:14px; }
 
-  /* ---------- app shell ---------- */
+  /* app shell */
   #appView { height:100%; display:flex; flex-direction:column; }
   header { padding:calc(env(safe-area-inset-top,0px) + 14px) 20px 6px; display:flex; align-items:center; justify-content:space-between; }
   header h1 { margin:0; font-size:22px; font-weight:800; }
@@ -42,16 +42,16 @@
   main { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:8px 16px 24px; }
   .tab { display:none; max-width:520px; margin:0 auto; }
   .tab.active { display:block; }
-
   nav { display:flex; background:var(--panel); border-top:1px solid var(--line); padding:6px 10px calc(env(safe-area-inset-bottom,0px) + 6px); }
   nav button { flex:1; padding:9px 0 6px; color:var(--mute); font-size:12px; font-weight:600; display:flex; flex-direction:column; align-items:center; gap:3px; }
   nav button svg { width:24px; height:24px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
   nav button.active { color:var(--leaf); }
-
   .card { background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:18px; margin-top:14px; }
   .card h3 { margin:0 0 12px; font-size:16px; font-weight:600; color:var(--mute); }
+  .sub { color:var(--mute); font-size:14px; margin-top:4px; }
+  .empty-msg { color:var(--mute); text-align:center; padding:14px 0; }
 
-  /* ---------- pump button (the hero) ---------- */
+  /* pump button */
   .hero { text-align:center; padding:26px 18px 22px; }
   .pump { position:relative; width:190px; height:190px; border-radius:50%; margin:6px auto 16px;
           background:radial-gradient(circle at 35% 30%, #2a5144, #14302a); border:2px solid var(--line);
@@ -65,72 +65,46 @@
   @keyframes ripple { from { transform:scale(1); opacity:.7; } to { transform:scale(1.45); opacity:0; } }
   @media (prefers-reduced-motion:reduce) { .pump.on::before,.pump.on::after { animation:none; } }
   .state { font-size:30px; font-weight:800; }
-  .sub { color:var(--mute); font-size:14px; margin-top:4px; }
+  .sched { display:block; margin-top:4px; }
 
-  /* ---------- last run + warnings ---------- */
-  function renderBanner() {
-    const b = [];
-    if (sched && sched.paused) b.push(["pause", "Auto watering is paused. The pump only runs when you switch it on."]);
-    if (lastRun && lastRun.after != null && lastRun.ok === false) b.push(["warn", "No water was detected at the sensor after the last run. Check the water tank, pipe and pump."]);
-    $("banner").innerHTML = b.map(x => '<div class="banner ' + x[0] + '">' + x[1] + '</div>').join("");
-  }
-  function renderLast() {
-    const r = lastRun;
-    renderBanner();
-    if (!r || !r.date) return;
-    const done = r.after != null;
-    const bad = done && r.ok === false;
-    let note = "Waiting for the reading 2 seconds after the pump stops…";
-    if (done) note = r.ok === false ? "No water detected at the sensor" : "Water detected at the sensor";
-    $("lastBody").innerHTML =
-      '<div class="when">' + fmtDate(r.date) + ", " + fmtTime(r.time) + '</div>' +
-      '<div class="ago">' + ago(r.ts) + '</div>' +
-      '<div class="readings">' +
-        '<div class="read before"><b>' + r.before + '</b><span>Before pump</span></div>' +
-        '<div class="arrow">→</div>' +
-        '<div class="read after' + (bad ? " bad" : "") + '"><b>' + (done ? r.after : "…") + '</b><span>2 s after off</span></div>' +
-      '</div><div class="delta">' + note + '</div>';
-  }
+  /* banners */
+  .banner { margin-top:14px; padding:13px 16px; border-radius:16px; font-size:14px; line-height:1.35; border:1px solid; }
+  .banner.warn { background:rgba(255,122,107,.12); border-color:var(--bad); color:#ffd2cc; }
+  .banner.pause { background:rgba(224,164,106,.12); border-color:var(--soil); color:#f5dcc0; }
 
-  /* ---------- chart ---------- */
-  function renderChart() {
-    const list = history.filter(r => r.date && r.after != null).sort((a, b) => a.ts - b.ts).slice(-14);
-    if (list.length < 2) { $("chart").innerHTML = '<div class="empty-msg">The chart appears after two completed waterings.</div>'; return; }
-    const W = 320, H = 180, L = 36, R = 10, T = 10, B = 26, n = list.length;
-    const x = i => L + (W - L - R) * i / (n - 1);
-    const y = v => T + (H - T - B) * (1 - Math.min(v, 4095) / 4095);
-    const path = k => list.map((r, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(r[k]).toFixed(1)).join(" ");
-    let g = "";
-    [0, 1000, 2000, 3000, 4000].forEach(v => {
-      g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="#27473c" stroke-width="1"/>' +
-           '<text x="' + (L - 5) + '" y="' + (y(v) + 4) + '" fill="#8fb0a2" font-size="10" text-anchor="end">' + v + '</text>';
-    });
-    const dots = (k, c) => list.map((r, i) => '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(r[k]).toFixed(1) + '" r="3.5" fill="' + (k === "after" && r.ok === false ? "#ff7a6b" : c) + '"/>').join("");
-    const lab = (i, anchor) => '<text x="' + x(i) + '" y="' + (H - 7) + '" fill="#8fb0a2" font-size="10" text-anchor="' + anchor + '">' + list[i].date.slice(5) + '</text>';
-    $("chart").innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '">' + g +
-      '<path d="' + path("before") + '" fill="none" stroke="#e0a46a" stroke-width="2.5" stroke-linejoin="round"/>' +
-      '<path d="' + path("after") + '" fill="none" stroke="#5cc8ff" stroke-width="2.5" stroke-linejoin="round"/>' +
-      dots("before", "#e0a46a") + dots("after", "#5cc8ff") + lab(0, "start") + lab(n - 1, "end") + '</svg>';
-  }
+  /* last run */
+  .when { font-size:22px; font-weight:800; }
+  .ago { color:var(--mute); font-size:14px; margin:2px 0 16px; }
+  .readings { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:10px; }
+  .read { background:var(--panel2); border-radius:16px; padding:14px 10px; text-align:center; }
+  .read b { display:block; font-size:32px; font-weight:800; line-height:1.1; }
+  .read span { display:block; margin-top:6px; font-size:12px; color:var(--mute); }
+  .read.before b { color:var(--soil); }
+  .read.after b { color:var(--water); }
+  .read.bad b { color:var(--bad); }
+  .arrow { color:var(--mute); font-size:22px; }
+  .delta { margin-top:12px; font-size:13px; color:var(--mute); text-align:center; }
 
-  /* ---------- check soil now ---------- */
-  function showSoil(v) {
-    let t = "";
-    if (v.ts) t = "Taken at " + new Date(v.ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
-    $("soilBox").innerHTML = '<b>' + v.value + '</b><span>Raw value · ' + t + '</span>';
-  }
-  function soilDone() { pendingReq = 0; clearTimeout(soilTimer); $("soilBtn").disabled = false; }
-  $("soilBtn").onclick = async () => {
-    if (!(lastSeen && (Date.now() - lastSeen) < 30000)) { $("soilBox").innerHTML = '<span>Device is offline. Try again when it is online.</span>'; return; }
-    pendingReq = Math.max(pendingReq + 1, Math.floor(Date.now() / 1000));
-    $("soilBtn").disabled = true;
-    $("soilBox").innerHTML = '<span>Reading…</span>';
-    try { await set(ref(db, "relays/soilReq"), pendingReq); }
-    catch (e) { soilDone(); $("soilBox").innerHTML = '<span>Could not send the request.</span>'; return; }
-    soilTimer = setTimeout(() => { soilDone(); $("soilBox").innerHTML = '<span>No response. The device may be offline.</span>'; }, 10000);
-  };
+  /* check soil now */
+  .soilbtn { display:block; width:100%; padding:16px; border-radius:16px; background:linear-gradient(135deg,#5cc8ff,#2a8fd0); color:#04202e; font-weight:800; font-size:17px; box-shadow:0 6px 16px rgba(42,143,208,.35); }
+  .soilbtn:active { transform:scale(.98); }
+  .soilbtn:disabled { opacity:.6; }
+  .soilval { text-align:center; margin-top:14px; color:var(--mute); font-size:14px; }
+  .soilval b { display:block; font-size:44px; font-weight:800; line-height:1.1; color:var(--text); margin-bottom:4px; }
 
-  /* ---------- calendar ---------- */
+  /* settings */
+  .setrow { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:10px 0; }
+  .setrow label { flex:1; font-size:15px; }
+  .setrow input { width:150px; margin:0; text-align:center; }
+  .tog { flex:0 0 auto; width:56px; height:32px; border-radius:16px; background:var(--panel2); border:1px solid var(--line); position:relative; transition:background .2s; }
+  .tog span { position:absolute; top:3px; left:3px; width:24px; height:24px; border-radius:50%; background:var(--mute); transition:transform .2s, background .2s; }
+  .tog.on { background:#6b4a1d; border-color:var(--soil); }
+  .tog.on span { transform:translateX(24px); background:var(--soil); }
+  .chips { display:flex; gap:8px; margin-top:10px; }
+  .chips button { flex:1; padding:10px 0; border-radius:12px; background:var(--panel2); border:1px solid var(--line); font-weight:600; }
+  .chips button.sel { border-color:var(--water); color:var(--water); }
+
+  /* calendar */
   .calhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
   .calhead strong { font-size:19px; font-weight:800; }
   .calhead button { width:38px; height:38px; border-radius:12px; background:var(--panel2); font-size:20px; }
@@ -147,8 +121,9 @@
   .run:first-child { border-top:0; }
   .run small { color:var(--mute); font-size:13px; }
   .run .v { text-align:right; }
-  .run .v i { font-style:normal; color:var(--soil); } .run .v u { text-decoration:none; color:var(--water); }
-  .empty-msg { color:var(--mute); text-align:center; padding:14px 0; }
+  .run .v i { font-style:normal; color:var(--soil); }
+  .run .v u { text-decoration:none; color:var(--water); }
+  svg.chart { width:100%; height:auto; display:block; }
 </style>
 </head>
 <body>
@@ -181,20 +156,21 @@
 
       <div id="banner"></div>
 
-      <div class="card" id="lastCard">
-        <h3>Last watering</h3>
-        <div id="lastBody"><div class="empty-msg">No watering recorded yet.</div></div>
+      <div class="card">
+        <h3>Last pump run</h3>
+        <div id="lastBody"><div class="empty-msg">No pump run recorded yet.</div></div>
       </div>
 
       <div class="card">
         <h3>Check soil now</h3>
         <button class="soilbtn" id="soilBtn">Read sensor now</button>
-        <div class="soilval" id="soilBox"><span>Tap the button to read the sensor.</span></div>
+        <div class="soilval" id="soilBox">Tap the button to read the sensor.</div>
+        <div class="sub" style="text-align:center;margin-top:10px">Shown here only. Nothing is saved.</div>
       </div>
 
-      <div class="card" id="setCard">
+      <div class="card">
         <h3>Auto watering settings</h3>
-        <div class="setrow"><label for="pauseSw">Pause daily auto start</label><input id="pauseSw" class="sw" type="checkbox"></div>
+        <div class="setrow"><label>Pause daily auto start</label><button class="tog" id="pauseSw" role="switch" aria-checked="false" aria-label="Pause daily auto start"><span></span></button></div>
         <div class="setrow"><label for="timeIn">Daily start time</label><input id="timeIn" type="time" value="06:40"></div>
         <div class="setrow"><label for="durIn">Run time (seconds)</label><input id="durIn" type="number" min="1" max="300" value="15" inputmode="numeric"></div>
         <div class="chips" id="chips"><button data-s="15">15 s</button><button data-s="30">30 s</button><button data-s="45">45 s</button><button data-s="60">60 s</button></div>
@@ -210,16 +186,16 @@
           <button id="nextM" aria-label="Next month">›</button>
         </div>
         <div class="grid" id="calGrid"></div>
-        <div id="dayDetail">Green days mean the pump ran. The badge shows how many times. Tap a day for details.</div>
+        <div id="dayDetail">Green days mean the plant was watered (the sensor detected water). The badge shows how many times. Tap a day for details.</div>
       </div>
     </section>
 
     <!-- HISTORY -->
     <section class="tab" id="tab-log">
       <div class="card">
-        <h3>Sensor before and after (last 14 waterings)</h3>
+        <h3>Watering times (last 14 days)</h3>
         <div id="chart"></div>
-        <div class="legend"><span><i style="background:var(--soil)"></i>Before pump</span><span><i style="background:var(--water)"></i>2 s after off</span></div>
+        <div class="sub" style="text-align:center;margin-top:8px">Each dot is one watering. Higher up means earlier in the day.</div>
       </div>
       <div class="card">
         <h3>Recent waterings</h3>
@@ -263,7 +239,7 @@
   const dateKey = (y, m, d) => y + "-" + pad(m + 1) + "-" + pad(d);
   const todayKey = () => { const t = new Date(); return dateKey(t.getFullYear(), t.getMonth(), t.getDate()); };
 
-  function fmtTime(hms) {            // "06:40:12" -> "6:40 AM"
+  function fmtTime(hms) {
     if (!hms) return "";
     let [h, m] = hms.split(":").map(Number);
     const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
@@ -291,34 +267,57 @@
     const online = lastSeen && (Date.now() - lastSeen) < 30000;
     $("dot").className = "dot" + (online ? " live" : "");
     $("statusText").textContent = online ? "Device online" : "Device offline";
-    if (lastRun) renderLast();      // refresh "x min ago"
+    if (lastRun) renderLast();
   }
+  $("pumpBtn").onclick = () => set(ref(db, "relays/r1"), !pumpOn);
 
-  /* ---------- last run ---------- */
+  /* ---------- banners + last run ---------- */
+  function renderBanner() {
+    const b = [];
+    if (sched && sched.paused) b.push(["pause", "Auto watering is paused. The pump only runs when you switch it on."]);
+    if (lastRun && lastRun.after != null && lastRun.ok === false) b.push(["warn", "No water was detected at the sensor after the last run. Check the water tank, pipe and pump."]);
+    $("banner").innerHTML = b.map(x => '<div class="banner ' + x[0] + '">' + x[1] + '</div>').join("");
+  }
   function renderLast() {
     const r = lastRun;
+    renderBanner();
     if (!r || !r.date) return;
-    const after = r.after != null ? r.after : "…";
-    let delta = "Waiting for the reading 2 seconds after the pump stops…";
-    if (r.after != null) {
-      const diff = r.before - r.after;     // lower raw value = wetter soil
-      delta = diff > 0 ? "Soil got wetter (raw value dropped by " + diff + ")"
-            : diff < 0 ? "Raw value rose by " + (-diff) : "No change in raw value";
-    }
+    const done = r.after != null, bad = done && r.ok === false;
+    let note = "Waiting for the reading 2 seconds after the pump stops…";
+    if (done) note = bad ? "No water detected at the sensor" : "Water detected at the sensor";
     $("lastBody").innerHTML =
       '<div class="when">' + fmtDate(r.date) + ", " + fmtTime(r.time) + '</div>' +
       '<div class="ago">' + ago(r.ts) + '</div>' +
       '<div class="readings">' +
-        '<div class="read before"><b>' + r.before + '</b><span>Soil before</span></div>' +
+        '<div class="read before"><b>' + r.before + '</b><span>Before pump</span></div>' +
         '<div class="arrow">→</div>' +
-        '<div class="read after"><b>' + after + '</b><span>2 s after off</span></div>' +
-      '</div><div class="delta">' + delta + '</div>';
+        '<div class="read after' + (bad ? " bad" : "") + '"><b>' + (done ? r.after : "…") + '</b><span>2 s after off</span></div>' +
+      '</div><div class="delta">' + note + '</div>';
   }
 
-  /* ---------- calendar ---------- */
+  /* ---------- check soil now (nothing is kept) ---------- */
+  function showSoil(v) {
+    const t = v.ts ? new Date(v.ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }) : "";
+    $("soilBox").innerHTML = '<b>' + v.value + '</b>Raw value' + (t ? " · taken at " + t : "");
+  }
+  function soilDone() { pendingReq = 0; clearTimeout(soilTimer); $("soilBtn").disabled = false; }
+  $("soilBtn").onclick = async () => {
+    if (!(lastSeen && (Date.now() - lastSeen) < 30000)) { $("soilBox").textContent = "Device is offline. Try again when it is online."; return; }
+    pendingReq = Math.max(pendingReq + 1, Math.floor(Date.now() / 1000));
+    $("soilBtn").disabled = true;
+    $("soilBox").textContent = "Reading…";
+    try { await set(ref(db, "relays/soilReq"), pendingReq); }
+    catch (e) { soilDone(); $("soilBox").textContent = "Could not send the request."; return; }
+    soilTimer = setTimeout(() => {
+      set(ref(db, "relays/soilReq"), null).catch(() => {});
+      soilDone(); $("soilBox").textContent = "No response. The device may be offline.";
+    }, 10000);
+  };
+
+  /* ---------- calendar (counts only waterings where water was detected) ---------- */
   function runsByDate() {
     const map = {};
-    history.forEach(r => { if (r.date) (map[r.date] = map[r.date] || []).push(r); });
+    history.forEach(r => { if (r.date && r.ok === true) (map[r.date] = map[r.date] || []).push(r); });
     return map;
   }
   function renderCal() {
@@ -337,27 +336,46 @@
     renderDayDetail();
   }
   function runRow(r, withDate) {
+    const bad = r.ok === false;
     return '<div class="run"><div>' + (withDate ? fmtDate(r.date) + "<br>" : "") + '<small>' + fmtTime(r.time) + '</small></div>' +
-           '<div class="v"><i>' + r.before + '</i> → <u>' + (r.after != null ? r.after : "…") + '</u><br><small>before → after</small></div></div>';
+           '<div class="v"><i>' + r.before + '</i> → <u>' + (r.after != null ? r.after : "…") + '</u><br>' +
+           (bad ? '<small style="color:var(--bad)">no water detected</small>' : '<small>before → after</small>') + '</div></div>';
   }
   function renderDayDetail() {
-    const box = $("dayDetail");
     if (!selDate) return;
     const list = (runsByDate()[selDate] || []).slice().sort((a, b) => a.ts - b.ts);
-    box.innerHTML = '<div style="color:var(--text);font-weight:600;margin-bottom:6px">' + fmtDate(selDate) + " · " +
+    $("dayDetail").innerHTML = '<div style="color:var(--text);font-weight:600;margin-bottom:6px">' + fmtDate(selDate) + " · " +
       (list.length ? list.length + (list.length === 1 ? " time" : " times") : "no watering") + '</div>' + list.map(r => runRow(r)).join("");
   }
-  $("calGrid").onclick = e => {
-    const b = e.target.closest(".day[data-k]"); if (!b) return;
-    selDate = b.dataset.k; renderCal();
-  };
+  $("calGrid").onclick = e => { const b = e.target.closest(".day[data-k]"); if (!b) return; selDate = b.dataset.k; renderCal(); };
   $("prevM").onclick = () => { viewM--; if (viewM < 0) { viewM = 11; viewY--; } renderCal(); };
   $("nextM").onclick = () => { viewM++; if (viewM > 11) { viewM = 0; viewY++; } renderCal(); };
 
-  /* ---------- history list ---------- */
+  /* ---------- history: list + watering-time chart ---------- */
   function renderLog() {
     const list = history.filter(r => r.date).sort((a, b) => b.ts - a.ts).slice(0, 40);
     $("logList").innerHTML = list.length ? list.map(r => runRow(r, true)).join("") : '<div class="empty-msg">No watering recorded yet.</div>';
+  }
+  function renderChart() {
+    const t = new Date(), days = [];
+    for (let i = 13; i >= 0; i--) { const d = new Date(t.getFullYear(), t.getMonth(), t.getDate() - i); days.push({ k: dateKey(d.getFullYear(), d.getMonth(), d.getDate()), n: d.getDate() }); }
+    const W = 320, H = 230, L = 42, R = 8, T = 12, B = 26, n = days.length;
+    const x = i => L + (W - L - R) * (i + 0.5) / n, y = h => T + (H - T - B) * h / 24;
+    let g = "";
+    [[0, "12 AM"], [6, "6 AM"], [12, "12 PM"], [18, "6 PM"], [24, "12 AM"]].forEach(a => {
+      g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(a[0]) + '" y2="' + y(a[0]) + '" stroke="#27473c"/>' +
+           '<text x="' + (L - 6) + '" y="' + (y(a[0]) + 4) + '" fill="#8fb0a2" font-size="10" text-anchor="end">' + a[1] + '</text>';
+    });
+    days.forEach((d, i) => { g += '<text x="' + x(i) + '" y="' + (H - 8) + '" fill="' + (i === n - 1 ? "#5cc8ff" : "#8fb0a2") + '" font-size="10" text-anchor="middle">' + d.n + '</text>'; });
+    let dots = "", count = 0;
+    history.forEach(r => {
+      if (!r.date || r.ok !== true || !r.time) return;
+      const i = days.findIndex(d => d.k === r.date); if (i < 0) return;
+      const [hh, mm] = r.time.split(":").map(Number);
+      dots += '<circle cx="' + x(i) + '" cy="' + y(hh + mm / 60) + '" r="5.5" fill="#7ee0a4" fill-opacity=".85"/>'; count++;
+    });
+    $("chart").innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '">' + g + dots + '</svg>' +
+      (count ? "" : '<div class="empty-msg">No watering detected in the last 14 days.</div>');
   }
 
   /* ---------- settings ---------- */
@@ -366,23 +384,24 @@
     document.querySelectorAll("#chips button").forEach(b => b.classList.toggle("sel", Number(b.dataset.s) === v));
   }
   function renderSub() {
-    let t = "Tap to turn on or off";
-    if (sched && sched.paused) t += " · Auto start paused";
+    let line2;
+    if (sched && sched.paused) line2 = "Auto start is paused";
     else {
       const h = sched && sched.hour != null ? sched.hour : 6, m = sched && sched.minute != null ? sched.minute : 40;
-      t += " · Auto start daily at " + fmtTime(pad(h) + ":" + pad(m)) + " for " + ((sched && sched.duration) || 15) + " s";
+      line2 = "Auto start daily at " + fmtTime(pad(h) + ":" + pad(m)) + " for " + ((sched && sched.duration) || 15) + " s";
     }
-    $("subText").textContent = t;
+    $("subText").innerHTML = 'Tap to turn on or off<span class="sched">' + line2 + '</span>';
   }
+  function setTog(v) { $("pauseSw").classList.toggle("on", v); $("pauseSw").setAttribute("aria-checked", v); }
   function applySchedule(s) {
     sched = s;
     if (s && s.hour != null) { $("timeIn").value = pad(s.hour) + ":" + pad(s.minute); $("durIn").value = s.duration || 15; }
-    $("pauseSw").checked = !!(s && s.paused);
+    setTog(!!(s && s.paused));
     renderChips(); renderSub(); renderBanner();
   }
   document.querySelectorAll("#chips button").forEach(b => b.onclick = () => { $("durIn").value = b.dataset.s; renderChips(); });
   $("durIn").oninput = renderChips;
-  $("pauseSw").onchange = () => set(ref(db, "schedule/paused"), $("pauseSw").checked);
+  $("pauseSw").onclick = () => { const v = !$("pauseSw").classList.contains("on"); setTog(v); set(ref(db, "schedule/paused"), v); };
   $("saveSet").onclick = async () => {
     const [h, m] = ($("timeIn").value || "").split(":").map(Number);
     const d = Math.round(Number($("durIn").value));
@@ -399,9 +418,12 @@
     onValue(ref(db, "status/lastSeen"), s => { lastSeen = s.val() || 0; renderStatus(); });
     onValue(ref(db, "schedule"), s => applySchedule(s.val()));
     onValue(ref(db, "soilNow"), s => {
-      const v = s.val(); if (!v) return;
-      if (pendingReq && v.req === pendingReq) { soilDone(); showSoil(v); }
-      else if (!pendingReq) showSoil(v);
+      const v = s.val();
+      if (v && pendingReq && v.req === pendingReq) {
+        soilDone(); showSoil(v);
+        set(ref(db, "soilNow"), null).catch(() => {});
+        set(ref(db, "relays/soilReq"), null).catch(() => {});
+      }
     });
     onValue(ref(db, "lastRun"), s => { lastRun = s.val(); renderLast(); });
     onValue(query(ref(db, "history"), orderByKey(), limitToLast(500)), s => {
@@ -410,7 +432,6 @@
     });
     setInterval(renderStatus, 5000);
   }
-  $("pumpBtn").onclick = () => set(ref(db, "relays/r1"), !pumpOn);
 
   /* ---------- tabs + auth ---------- */
   document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
@@ -427,7 +448,7 @@
   onAuthStateChanged(auth, user => {
     $("loginView").classList.toggle("hidden", !!user);
     $("appView").classList.toggle("hidden", !user);
-    if (user) { selDate = todayKey(); renderPump(); renderCal(); startListening(); }
+    if (user) { selDate = todayKey(); renderPump(); renderCal(); renderChart(); renderSub(); startListening(); }
   });
 </script>
 </body>
